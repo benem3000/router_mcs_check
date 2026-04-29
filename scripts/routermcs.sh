@@ -28,24 +28,20 @@ for arg in "$@"; do
     esac
 done
 
-if [[ "$DEBUG" == "true" && "$VERBOSE" == "true" ]]; then
-    echo "--- FULL SESSION START: $(date) ---" > "$FULL_LOG"
+# --- COMPREHENSIVE LOGGING SETUP ---
+if [[ "$DEBUG" == "true" ]]; then
+    echo -e "\n--- FULL SESSION START: $(date) ---" >> "$FULL_LOG"
     chown "$REAL_USER:$REAL_USER" "$FULL_LOG" 2>/dev/null
-fi
 
-log_cmd() {
-    local label="$1"
-    local cmd="$2"
-    if [[ "$DEBUG" == "true" && "$VERBOSE" == "true" ]]; then
-        echo -e "${YELLOW}[EXEC] $label: $cmd${NC}" | tee -a "$FULL_LOG"
-        eval "$cmd" 2>&1 | tee -a "$FULL_LOG"
-    elif [[ "$VERBOSE" == "true" ]]; then
-        echo -e "${YELLOW}[EXEC] $label${NC}"
-        eval "$cmd"
-    else
-        eval "$cmd" > /dev/null 2>&1
-    fi
-}
+    # Mirror all stdout and stderr to the log file globally
+    exec > >(tee -a "$FULL_LOG") 2>&1
+
+    echo -e "${YELLOW}[*] Debug Mode Enabled: Full bash trace and log generation active.${NC}"
+    # Enable xtrace to print every command and variable expansion
+    set -x
+elif [[ "$VERBOSE" == "true" ]]; then
+    echo -e "${YELLOW}[*] Verbose Mode Enabled: Logging command outputs to console.${NC}"
+fi
 
 [[ $EUID -ne 0 ]] && { echo -e "${YELLOW}Root required. Requesting sudo...${NC}"; sudo -v || exit 1; exec sudo "$0" "$@"; }
 
@@ -53,10 +49,12 @@ for cmd in iw iwmon awk lspci lsusb traceroute curl ethtool; do
     command -v $cmd &> /dev/null || { echo -e "${RED}ERROR: '$cmd' is missing.${NC}"; exit 1; }
 done
 
+[[ "$DEBUG" == "true" ]] && set +x # Pause trace for clean UI display
 clear
 echo -e "${BLUE}-------------------------------------------------------${NC}"
 echo -e "${BLUE}        Wireless MCS Discovery & SSID Tool             ${NC}"
 echo -e "${BLUE}-------------------------------------------------------${NC}"
+[[ "$DEBUG" == "true" ]] && set -x # Resume trace
 
 # --- INTERFACE DISCOVERY ---
 mapfile -t iw_out < <(iw dev)
@@ -77,16 +75,25 @@ done
 [[ ${#phys[@]} -eq 0 ]] && { echo -e "${RED}ERROR: No wireless hardware found.${NC}"; exit 1; }
 
 # --- STEP 1: PHY & CARD ID ---
+[[ "$DEBUG" == "true" ]] && set +x
 echo -e "\n${GREEN}Step 1: Select Physical Interface${NC}"
 phy_display=()
 for p in "${phys[@]}"; do phy_display+=("$p (Handles: ${phy_map[$p]:-none})"); done
 PS3="Selection (Enter 1-${#phys[@]}): "
 while true; do
     select choice in "${phy_display[@]}"; do
-        if [[ -n "$choice" ]]; then PHY=$(echo "$choice" | awk '{print $1}'); break 2;
-        else echo -e "\n${YELLOW}>>> Warning: Invalid selection.${NC}"; break; fi
+        if [[ -n "$choice" ]]; then
+            [[ "$DEBUG" == "true" ]] && echo "[USER INPUT] Step 1 Selection ($REPLY): $choice" >> "$FULL_LOG"
+            PHY=$(echo "$choice" | awk '{print $1}')
+            break 2
+        else
+            [[ "$DEBUG" == "true" ]] && echo "[USER INPUT] Step 1 Invalid Selection: $REPLY" >> "$FULL_LOG"
+            echo -e "\n${YELLOW}>>> Warning: Invalid selection.${NC}"
+            break
+        fi
     done
 done
+[[ "$DEBUG" == "true" ]] && set -x
 
 TARGET_WLAN=(${phy_map[$PHY]})
 BUS_ID=$(ethtool -i "${TARGET_WLAN[0]}" 2>/dev/null | grep "bus-info" | awk '{print $2}')
@@ -99,23 +106,36 @@ fi
 echo -e "[+] Local Card: ${BLUE}${LOCAL_CARD:-Generic Adapter}${NC}"
 
 # --- STEPS 2-5 ---
+[[ "$DEBUG" == "true" ]] && set +x
 echo -e "\n${GREEN}Step 2: Select Wireless Interface${NC}"
 filtered_wlans=(${phy_map[$PHY]})
 PS3="Selection (Enter 1-${#filtered_wlans[@]}): "
 while true; do
     select WLAN in "${filtered_wlans[@]}"; do
-        [[ -n "$WLAN" ]] && break 2 || { echo -e "\n${YELLOW}>>> Warning: Invalid selection.${NC}"; break; }
+        if [[ -n "$WLAN" ]]; then
+            [[ "$DEBUG" == "true" ]] && echo "[USER INPUT] Step 2 Selection ($REPLY): $WLAN" >> "$FULL_LOG"
+            break 2
+        else
+            [[ "$DEBUG" == "true" ]] && echo "[USER INPUT] Step 2 Invalid Selection: $REPLY" >> "$FULL_LOG"
+            echo -e "\n${YELLOW}>>> Warning: Invalid selection.${NC}"
+            break
+        fi
     done
 done
+[[ "$DEBUG" == "true" ]] && set -x
 
 CURRENT_SSID=$(iw dev "$WLAN" link | grep "SSID:" | awk '{print $2}')
+
+[[ "$DEBUG" == "true" ]] && set +x
 echo -e "\n${GREEN}Step 3: Choose Reporting Scope${NC}"
 if [ -z "$CURRENT_SSID" ]; then
     SCAN_MODE="All"
+    [[ "$DEBUG" == "true" ]] && echo "[USER INPUT] Step 3 Auto-Selected (No current SSID): All" >> "$FULL_LOG"
 else
     options_scope=("Current SSID only ($CURRENT_SSID)" "All Networks")
     select opt in "${options_scope[@]}"; do
         if [[ -n "$opt" ]]; then
+            [[ "$DEBUG" == "true" ]] && echo "[USER INPUT] Step 3 Selection ($REPLY): $opt" >> "$FULL_LOG"
             [[ $REPLY -eq 1 ]] && { SCAN_MODE="Single"; TARGET_SSID="$CURRENT_SSID"; } || SCAN_MODE="All"
             break 2
         fi
@@ -126,23 +146,35 @@ fi
 echo -e "\n${GREEN}Step 4: Select Scan Duration${NC}"
 options_dur=("Quick Scan (10s)" "Full Scan (30s)")
 select dur_choice in "${options_dur[@]}"; do
-    [[ -n "$dur_choice" ]] && { [[ $REPLY -eq 1 ]] && DURATION=10 || DURATION=30; break 2; } || break
+    if [[ -n "$dur_choice" ]]; then
+        [[ "$DEBUG" == "true" ]] && echo "[USER INPUT] Step 4 Selection ($REPLY): $dur_choice" >> "$FULL_LOG"
+        [[ $REPLY -eq 1 ]] && DURATION=10 || DURATION=30
+        break 2
+    fi
+    break
 done
 
 echo -e "\n${GREEN}Step 5: Privacy Settings${NC}"
 options_privacy=("Censor SSID" "Show Full SSID")
 select choice in "${options_privacy[@]}"; do
-    [[ -n "$choice" ]] && { [[ $REPLY -eq 1 ]] && CENSOR_FLAG="true" || CENSOR_FLAG="false"; break 2; } || break
+    if [[ -n "$choice" ]]; then
+        [[ "$DEBUG" == "true" ]] && echo "[USER INPUT] Step 5 Selection ($REPLY): $choice" >> "$FULL_LOG"
+        [[ $REPLY -eq 1 ]] && CENSOR_FLAG="true" || CENSOR_FLAG="false"
+        break 2
+    fi
+    break
 done
+[[ "$DEBUG" == "true" ]] && set -x
 
 # --- CLEANUP ---
 CLEANED_UP=false
 cleanup() {
+    [[ "$DEBUG" == "true" ]] && set +x
     if [[ "$CLEANED_UP" == "true" ]]; then return; fi
     CLEANED_UP=true
     local exit_code=$?
     echo -e "\n${YELLOW}[*] Cleanup: Verifying background tasks and files...${NC}"
-    if [[ "$DEBUG" == "true" && "$VERBOSE" == "false" ]]; then
+    if [[ "$DEBUG" == "true" ]]; then
         cp "$TEMP_LOG" "raw_capture.log"
         chown "$REAL_USER:$REAL_USER" "raw_capture.log" 2>/dev/null
     fi
@@ -155,11 +187,7 @@ trap cleanup EXIT INT TERM
 
 # --- EXECUTION ---
 echo -e "\n${BLUE}[1/3] Initializing capture on $PHY...${NC}"
-if [[ "$DEBUG" == "true" && "$VERBOSE" == "true" ]]; then
-    iwmon -i "$PHY" | tee -a "$FULL_LOG" > "$TEMP_LOG" 2>&1 &
-else
-    iwmon -i "$PHY" > "$TEMP_LOG" 2>&1 &
-fi
+iwmon -i "$PHY" > "$TEMP_LOG" 2>&1 &
 MON_PID=$!
 sleep 1
 
@@ -168,15 +196,30 @@ ISP_NAME="Unknown"
 if [[ -n "$CURRENT_SSID" ]]; then
     echo -e "${BLUE}[*] Identifying ISP via Gateway Traceroute...${NC}"
     ISP_CMD="traceroute -m 8 -q 1 8.8.8.8"
-    log_cmd "ISP Traceroute" "$ISP_CMD"
-    (eval "$ISP_CMD" 2>&1 | awk '/ms/ && $2 ~ /[a-zA-Z]/ {n=split($2,a,"."); if(n>1) print a[n-1]"."a[n]}' | head -n 1 > "$ISP_TEMP") &
+
+    [[ "$DEBUG" == "false" && "$VERBOSE" == "true" ]] && echo -e "${YELLOW}[EXEC] ISP Traceroute: $ISP_CMD${NC}"
+
+    if [[ "$VERBOSE" == "true" || "$DEBUG" == "true" ]]; then
+        (eval "$ISP_CMD" 2>&1 | tee /dev/stderr | awk '/ms/ && $2 ~ /[a-zA-Z]/ {n=split($2,a,"."); if(n>1) print a[n-1]"."a[n]}' | head -n 1 > "$ISP_TEMP") &
+    else
+        (eval "$ISP_CMD" 2>&1 | awk '/ms/ && $2 ~ /[a-zA-Z]/ {n=split($2,a,"."); if(n>1) print a[n-1]"."a[n]}' | head -n 1 > "$ISP_TEMP") &
+    fi
 fi
 
 echo -e "${BLUE}[2/3] Triggering scan on $WLAN...${NC}"
-log_cmd "Hardware Scan Trigger" "iw dev $WLAN scan"
+SCAN_CMD="iw dev $WLAN scan"
+[[ "$DEBUG" == "false" && "$VERBOSE" == "true" ]] && echo -e "${YELLOW}[EXEC] Hardware Scan Trigger: $SCAN_CMD${NC}"
 
+if [[ "$VERBOSE" == "true" || "$DEBUG" == "true" ]]; then
+    eval "$SCAN_CMD"
+else
+    eval "$SCAN_CMD" >/dev/null 2>&1
+fi
+
+[[ "$DEBUG" == "true" ]] && set +x # Disable trace during the timer to avoid spam
 for ((i=DURATION-1; i>0; i--)); do printf "\r[*] Capturing management frames... %2d seconds remaining " $i; sleep 1; done
 echo -e "\r[*] Capture complete! Processing data...                "
+[[ "$DEBUG" == "true" ]] && set -x
 kill $MON_PID 2>/dev/null
 
 # Tier 2 Enrichment
@@ -188,6 +231,7 @@ fi
 [[ -s "$ISP_TEMP" ]] && ISP_NAME=$(cat "$ISP_TEMP")
 
 # --- RESULTS ---
+[[ "$DEBUG" == "true" ]] && set +x # Clean output formatting
 echo -e "\n${BLUE}[3/3] Analysis Results (${SCAN_MODE})${NC}"
 echo -e "${BLUE}Hardware: ${NC}${LOCAL_CARD}"
 [[ -n "$CURRENT_SSID" ]] && echo -e "${BLUE}ISP:      ${NC}${ISP_NAME:-Undetermined}"
@@ -196,22 +240,46 @@ printf "${YELLOW}%-32s | %-12s | %-18s | %-12s | %-12s${NC}\n" "SSID" "BASIC MCS
 echo "--------------------------------------------------------------------------------------------------------------------------------"
 
 # --- TIERED PARSING ---
-awk -v mode="$SCAN_MODE" -v target="$TARGET_SSID" -v do_censor="$CENSOR_FLAG" -v enrich_mac="$ROUTER_MAC_ENRICHED" '
+awk -v mode="$SCAN_MODE" -v target="$TARGET_SSID" -v do_censor="$CENSOR_FLAG" -v enrich_mac="$ROUTER_MAC_ENRICHED" -v current_ssid="$CURRENT_SSID" '
 BEGIN {
     oui["98:da:c4"]="TP-Link"; oui["00:14:6c"]="Netgear"; oui["10:36:aa"]="Technicolor";
     oui["08:b4:d2"]="Ubiquiti"; oui["0c:39:3d"]="Eero"; oui["08:02:8e"]="NETGEAR";
-    oui["66:67:72"]="TP-Link (Mesh)"; oui["5c:e9:31"]="TP-Link";
+    oui["5c:e9:31"]="TP-Link";
+}
+
+# Helper to convert hex to decimal for bitwise math
+function hex2dec(h) {
+    hex_str = "0123456789abcdef";
+    h1 = index(hex_str, tolower(substr(h, 1, 1))) - 1;
+    h2 = index(hex_str, tolower(substr(h, 2, 1))) - 1;
+    return (h1 * 16) + h2;
+}
+
+# Helper to normalize Locally Administered Addresses (LAAs) back to Universal
+function to_universal_mac(mac) {
+    first_octet = substr(mac, 1, 2);
+    dec = hex2dec(first_octet);
+
+    # Check if the U/L bit (value 2) is set
+    is_local = int(dec / 2) % 2;
+    if (is_local == 1) {
+        dec = dec - 2; # Flip the bit back to 0 (Universal)
+        hex_str = "0123456789abcdef";
+        new_h1 = substr(hex_str, int(dec / 16) + 1, 1);
+        new_h2 = substr(hex_str, (dec % 16) + 1, 1);
+        return new_h1 new_h2 substr(mac, 3);
+    }
+    return mac;
 }
 
 function truncate(str, len) {
-    if (length(str) > len) return substr(str, 1, len-3) "..."
-    return str
+    if (length(str) > len) return substr(str, 1, len-3) "...";
+    return str;
 }
 
 function save_entry() {
-    # CRITICAL: Only save if we found an actual SSID in this block
-    if (ssid_to_save == "") return
-    if (mode == "Single" && ssid_to_save != target) return
+    if (ssid_to_save == "") return;
+    if (mode == "Single" && ssid_to_save != target) return;
 
     if (do_censor == "true") {
         len = length(ssid_to_save); if (len > 2) {
@@ -220,42 +288,51 @@ function save_entry() {
         } else { final_name = ssid_to_save; }
     } else { final_name = ssid_to_save; }
 
-    source = "None"; v_final = "Unknown"; m_final = "N/A"
+    source = "None"; v_final = "Unknown"; m_final = "N/A";
+
+    # 1. WSC Manufacturer Info (Tier 1)
     if (manuf != "") {
-        v_final = manuf; m_final = (m_name != "" ? m_name : (m_num != "" ? m_num : "N/A")); source = "WSC (T1)"
+        v_final = manuf; m_final = (m_name != "" ? m_name : (m_num != "" ? m_num : "N/A")); source = "WSC (T1)";
     } else {
-        check_mac = (ssid_to_save == target && enrich_mac != "Unknown") ? enrich_mac : mac_addr
-        prefix = tolower(substr(check_mac, 1, 8))
-        if (prefix in oui) { v_final = oui[prefix]; source = "OUI (T3)"; }
-        else if (check_mac != "" && check_mac != "Unknown") {
-            cmd = "curl -s --connect-timeout 2 https://api.macvendors.com/" check_mac
+        # 2. Check Gateway ARP enrichment if this SSID matches the currently connected network
+        check_mac = (ssid_to_save == current_ssid && enrich_mac != "Unknown") ? enrich_mac : mac_addr;
+
+        # 3. LAA Normalization (Convert 66:67:72 back to 64:67:72)
+        univ_mac = to_universal_mac(check_mac);
+        prefix = tolower(substr(univ_mac, 1, 8));
+
+        # 4. Check internal OUI
+        if (prefix in oui) {
+            v_final = oui[prefix]; source = "OUI (T3)";
+        }
+        # 5. Fallback to API lookup
+        else if (univ_mac != "" && univ_mac != "Unknown") {
+            cmd = "curl -s --connect-timeout 2 https://api.macvendors.com/" univ_mac;
             if ((cmd | getline online_v) > 0 && online_v != "" && online_v !~ /errors|Not Found/) {
                 v_final = online_v; source = "API (T4)";
             }
             close(cmd);
         }
     }
-    mcs_str = (found_mcs) ? sprintf("MCS %d-%d", min_mcs, max_mcs) : "None"
 
-    # Store result, prioritizing T1/T3/T4 over "None"
+    mcs_str = (found_mcs) ? sprintf("MCS %d-%d", min_mcs, max_mcs) : "None";
+
     if (!results[final_name] || (source != "None" && results[final_name] ~ /None/)) {
         results[final_name] = sprintf("%-32s | %-12s | %-18s | %-12s | %-12s",
             truncate(final_name, 32),
             mcs_str,
             truncate(v_final, 18),
             truncate(m_final, 12),
-            source)
+            source);
     }
-    # Reset ssid_to_save after commit to prevent bleed into SSID-less packets
-    ssid_to_save = ""
+    ssid_to_save = "";
 }
 
-# New block reset on BSSID, BSS, or Source Address (TA)
 /BSSID / || /^BSS / || /Address 2 \(TA\):/ {
-    save_entry()
+    save_entry();
     found_mcs = 0; min_mcs = 999; max_mcs = -1; manuf = ""; m_name = ""; m_num = ""; mac_addr = "";
-    if ($0 ~ /Address 2 \(TA\):/) mac_addr = $NF
-    else if ($1 == "BSSID") mac_addr = $2
+    if ($0 ~ /Address 2 \(TA\):/) mac_addr = $NF;
+    else if ($1 == "BSSID") mac_addr = $2;
     else if ($1 == "BSS") { mac_addr = $2; sub(/\(.*/, "", mac_addr); }
     gsub(/[[:space:]]/, "", mac_addr);
 }
@@ -274,5 +351,7 @@ function save_entry() {
 /Model Name: /   { sub(/.*Model Name: /, "", $0); gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0); m_name = $0; }
 /Model Number: / { sub(/.*Model Number: /, "", $0); gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0); m_num = $0; }
 
-END { save_entry(); for (s in results) print results[s] }
+END { save_entry(); for (s in results) print results[s]; }
 ' "$TEMP_LOG" | sort
+
+[[ "$DEBUG" == "true" ]] && set -x
