@@ -3,7 +3,7 @@
 # ==============================================================================
 # Wireless MCS Discovery & SSID Tool
 # Description: Tiered hardware identification (WSC > Gateway ARP > OUI > API).
-# Usage: sudo ./routermcs.sh [-d | --debug] [-v | --verbose]
+# Usage: sudo ./routermcs.sh [-d | --debug] [-v | --verbose] [-c | --csv]
 # ==============================================================================
 
 # --- COLORS ---
@@ -17,6 +17,7 @@ NC='\033[0m'
 REAL_USER=${SUDO_USER:-$USER}
 DEBUG=false
 VERBOSE=false
+CSV_OUT=false
 FULL_LOG="routermcs_full.log"
 TEMP_LOG=$(mktemp)
 ISP_TEMP=$(mktemp)
@@ -25,6 +26,7 @@ for arg in "$@"; do
     case $arg in
         -d|--debug)   DEBUG=true ;;
         -v|--verbose) VERBOSE=true ;;
+        -c|--csv)     CSV_OUT=true ;;
     esac
 done
 
@@ -327,8 +329,9 @@ function save_entry() {
     m_name_final = (m_name != "") ? m_name : "N/A";
     m_num_final = (m_num != "") ? m_num : "N/A";
 
+    # Enclose variables in pipe structure for Markdown formatting
     if (!results[final_name] || (results[final_name] ~ /Unknown/ && v_final != "Unknown")) {
-        results[final_name] = sprintf("%-32s | %-12s | %-18s | %-16s | %-16s",
+        results[final_name] = sprintf("| %-32s | %-12s | %-18s | %-16s | %-16s |",
             truncate(final_name, 32),
             mcs_str,
             truncate(v_final, 18),
@@ -364,13 +367,34 @@ function save_entry() {
 END { save_entry(); for (s in results) print results[s]; }
 ' "$TEMP_LOG" | sort)
 
-# Output all parsed data simultaneously
 echo -e "${BLUE}[6/6] Finished! (${SCAN_MODE})${NC}"
+
+echo '```'
+
 echo -e "${BLUE}Hardware: ${NC}${LOCAL_CARD}"
 [[ -n "$CURRENT_SSID" ]] && echo -e "${BLUE}ISP:      ${NC}${ISP_NAME:-Undetermined}"
-echo "--------------------------------------------------------------------------------------------------------------------------------"
-printf "${YELLOW}%-32s | %-12s | %-18s | %-16s | %-16s${NC}\n" "SSID" "BASIC MCS" "VENDOR" "MODEL NAME" "MODEL NUM"
-echo "--------------------------------------------------------------------------------------------------------------------------------"
+
+echo "--------------------------------------------------------------------------------------------------------------"
+printf "%-32s | %-12s | %-18s | %-16s | %-16s\n" "SSID" "BASIC MCS" "VENDOR" "MODEL NAME" "MODEL NUM"
+echo "--------------------------------------------------------------------------------------------------------------"
 echo "$PARSED_RESULTS"
+echo '```'
+
+# CSV Export Routine
+if [[ "$CSV_OUT" == "true" ]]; then
+    echo "SSID,BASIC_MCS,VENDOR,MODEL_NAME,MODEL_NUM" > "routermcs_results.csv"
+    echo "$PARSED_RESULTS" | awk -F'|' '{
+        # Trim leading and trailing spaces from the Markdown columns
+        gsub(/^[ \t]+|[ \t]+$/, "", $2);
+        gsub(/^[ \t]+|[ \t]+$/, "", $3);
+        gsub(/^[ \t]+|[ \t]+$/, "", $4);
+        gsub(/^[ \t]+|[ \t]+$/, "", $5);
+        gsub(/^[ \t]+|[ \t]+$/, "", $6);
+        # Print only lines that actually have data
+        if ($2 != "") print $2","$3","$4","$5","$6
+    }' >> "routermcs_results.csv"
+    chown "$REAL_USER:$REAL_USER" "routermcs_results.csv" 2>/dev/null
+    echo -e "${GREEN}    [+] File exported to: routermcs_results.csv${NC}"
+fi
 
 [[ "$DEBUG" == "true" ]] && set -x
