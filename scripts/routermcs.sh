@@ -11,6 +11,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+VERSION="v1.0.1"
 REAL_USER=${SUDO_USER:-$USER}
 DEBUG=false
 VERBOSE=false
@@ -48,7 +49,7 @@ done
 [[ "$DEBUG" == "true" ]] && set +x
 clear
 echo -e "${BLUE}-------------------------------------------------------${NC}"
-echo -e "${BLUE}        Wireless MCS Discovery & SSID Tool             ${NC}"
+echo -e "${BLUE}      Wireless MCS Discovery & SSID Tool $Version      ${NC}"
 echo -e "${BLUE}-------------------------------------------------------${NC}"
 [[ "$DEBUG" == "true" ]] && set -x
 
