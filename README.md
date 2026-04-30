@@ -1,6 +1,7 @@
 # Wireless MCS DIagnostic Tool (`routermcs.sh`)
-[![VirusTotal Scan](https://github.com/benem3000/router_mcs_check/actions/workflows/virustotal.yml/badge.svg)](https://github.com/benem3000/router_mcs_check/actions/workflows/virustotal.yml)
-
+<!-- VT_BADGE_START -->
+[![VirusTotal Scan](https://github.com/benem3000/router_mcs_check/actions/workflows/virustotal.yml/badge.svg)](https://www.virustotal.com/gui/file/71eceff96955c664c268625884dc042ac80870b283eefcd14c4da45b7d4ddca7)
+<!-- VT_BADGE_END -->
 A simple, interactive Bash utility for Linux environments that scans nearby wireless networks and management frames to see if your router is broadcasting Basic MCS Sets incorrectly. Also attempts to identify other useful information like ISP, wireless card model, and vendor/model of the router to identify affected models.
 
 _AI Disclosure: Google Gemini was used heavily in the making of this tool, though testing and careful guidance were carried out by myself._
