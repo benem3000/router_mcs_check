@@ -17,9 +17,16 @@ chmod +x routermcs.sh`
 
 `./routermcs.sh`
 
-Profit!
+Share the results if desired. Ensure you copy the grave accents " ``` " that preceed and folow the results to ensure the formatting is preserved. (a.k.a. code markdown)
 
 
 
+___
+Additional arguments available for debugging purposes, they are not necessary for the average user.
 
-_Additional arguments available for debugging purposes, they are not recommended for the average user and include (-v or --verbose to provide more information from certatin functions and -d or --debug to enable logging and xtrace)_
+-c or --csv : Exports the final parsed results to a .csv file in your current directory.
+
+-v or --verbose : Prints live execution commands and raw output streams to the console.
+
+-d or --debug : Activates full Bash tracing and saves raw unparsed frame captures to .log files for deep troubleshooting.
+___
