@@ -1,6 +1,8 @@
 # Wireless MCS DIagnostic Tool (`routermcs.sh`)
 A simple, interactive Bash utility for Linux environments that scans nearby wireless networks and management frames to see if your router is broadcasting Basic MCS Sets incorrectly. Also attempts to identify other useful information like ISP, wireless card model, and vendor/model of the router to identify affected models.
 
+_AI Disclosure: Google Gemini was used heavily in the making of this tool, though testing and careful guidance were carried out by myself._
+
 ## Getting Started
 ## **Important! If sharing results with strangers or online, please be sure to select the option to censor the SSIDs to prevent potentially leaking your location!**
 
