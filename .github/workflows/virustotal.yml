@@ -6,6 +6,7 @@ on:
       - 'scripts/routermcs.sh' # Only runs when the script is actually updated
   release:
     types: [published]
+  workflow_dispatch:
 
 jobs:
   scan_and_update:
