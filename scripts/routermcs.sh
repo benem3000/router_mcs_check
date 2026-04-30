@@ -2,7 +2,6 @@
 
 # ==============================================================================
 # Wireless MCS Discovery & SSID Tool
-# Description: Tiered hardware identification (WSC > Gateway ARP > OUI > API).
 # Usage: sudo ./routermcs.sh [-d | --debug] [-v | --verbose] [-c | --csv]
 # ==============================================================================
 
@@ -35,11 +34,9 @@ if [[ "$DEBUG" == "true" ]]; then
     echo -e "\n--- FULL SESSION START: $(date) ---" >> "$FULL_LOG"
     chown "$REAL_USER:$REAL_USER" "$FULL_LOG" 2>/dev/null
 
-    # Mirror all stdout and stderr to the log file globally
     exec > >(tee -a "$FULL_LOG") 2>&1
 
     echo -e "${YELLOW}[*] Debug Mode Enabled: Full bash trace and log generation active.${NC}"
-    # Enable xtrace to print every command and variable expansion
     set -x
 elif [[ "$VERBOSE" == "true" ]]; then
     echo -e "${YELLOW}[*] Verbose Mode Enabled: Logging command outputs to console.${NC}"
@@ -51,21 +48,20 @@ for cmd in iw iwmon awk lspci lsusb traceroute curl ethtool; do
     command -v $cmd &> /dev/null || { echo -e "${RED}ERROR: '$cmd' is missing.${NC}"; exit 1; }
 done
 
-[[ "$DEBUG" == "true" ]] && set +x # Pause trace for clean UI display
+[[ "$DEBUG" == "true" ]] && set +x
 clear
 echo -e "${BLUE}-------------------------------------------------------${NC}"
 echo -e "${BLUE}        Wireless MCS Discovery & SSID Tool             ${NC}"
 echo -e "${BLUE}-------------------------------------------------------${NC}"
-[[ "$DEBUG" == "true" ]] && set -x # Resume trace
+[[ "$DEBUG" == "true" ]] && set -x
 
-# --- INTERFACE DISCOVERY ---
 mapfile -t iw_out < <(iw dev)
 declare -A phy_map
 phys=()
 current_phy=""
 
 for line in "${iw_out[@]}"; do
-    if [[ $line =~ phy#([0-9]+) ]]; then
+    if [[ $line =~ phy
         current_phy="phy${BASH_REMATCH[1]}"
         phys+=("$current_phy")
     elif [[ $line =~ Interface\ ([^[:space:]]+) ]]; then
@@ -76,7 +72,6 @@ done
 
 [[ ${#phys[@]} -eq 0 ]] && { echo -e "${RED}ERROR: No wireless hardware found.${NC}"; exit 1; }
 
-# Hardware Lookup (Moved before UI)
 [[ "$DEBUG" == "true" ]] && set +x
 declare -A phy_cards
 phy_display=()
@@ -98,7 +93,6 @@ for p in "${phys[@]}"; do
 done
 [[ "$DEBUG" == "true" ]] && set -x
 
-# --- STEP 1: PHY & CARD ID ---
 [[ "$DEBUG" == "true" ]] && set +x
 echo -e "\n${GREEN}[1/5] Select Physical Interface${NC}"
 PS3="Selection (Enter 1-${#phys[@]}): "
@@ -118,7 +112,6 @@ while true; do
 done
 [[ "$DEBUG" == "true" ]] && set -x
 
-# --- STEPS 2-5 ---
 [[ "$DEBUG" == "true" ]] && set +x
 echo -e "\n${GREEN}[2/5] Select Wireless Interface${NC}"
 filtered_wlans=(${phy_map[$PHY]})
@@ -181,9 +174,8 @@ select choice in "${options_privacy[@]}"; do
     break
 done
 [[ "$DEBUG" == "true" ]] && set -x
-echo "" # Clean break before execution steps
+echo ""
 
-# --- CLEANUP ---
 CLEANED_UP=false
 cleanup() {
     [[ "$DEBUG" == "true" ]] && set +x
@@ -202,13 +194,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# --- EXECUTION ---
 echo -e "${BLUE}[1/6] Initializing capture on $PHY...${NC}"
 iwmon -i "$PHY" > "$TEMP_LOG" 2>&1 &
 MON_PID=$!
 sleep 1
 
-# ISP Identification
 ISP_NAME="Unknown"
 if [[ -n "$CURRENT_SSID" ]]; then
     echo -e "${BLUE}[2/6] Identifying ISP via Gateway Traceroute...${NC}"
@@ -235,19 +225,17 @@ else
     eval "$SCAN_CMD" >/dev/null 2>&1
 fi
 
-[[ "$DEBUG" == "true" ]] && set +x # Disable trace during the timer to avoid spam
+[[ "$DEBUG" == "true" ]] && set +x
 for ((i=DURATION; i>=0; i--)); do
     printf "\r${BLUE}[4/6] Capturing management frames... %2d seconds remaining ${NC}" "$i"
     [[ $i -gt 0 ]] && sleep 1
 done
-# Overwrite the 0 seconds remaining line with the completed status
 printf "\r\033[K${BLUE}[4/6] Capture complete! ${NC}\n"
 [[ "$DEBUG" == "true" ]] && set -x
 kill $MON_PID 2>/dev/null
 
 echo -e "${BLUE}[5/6] Compiling results...${NC}"
 
-# Tier 2 Enrichment
 ROUTER_MAC_ENRICHED="Unknown"
 GW_IP=$(ip route show default | awk '/default/ {print $3; exit}')
 if [[ -n "$GW_IP" ]]; then
@@ -256,9 +244,8 @@ fi
 [[ -s "$ISP_TEMP" ]] && ISP_NAME=$(cat "$ISP_TEMP")
 
 # --- RESULTS ---
-[[ "$DEBUG" == "true" ]] && set +x # Clean output formatting
+[[ "$DEBUG" == "true" ]] && set +x
 
-# Process the data silently into a variable before displaying to ensure simultaneous rendering
 PARSED_RESULTS=$(awk -v mode="$SCAN_MODE" -v target="$TARGET_SSID" -v do_censor="$CENSOR_FLAG" -v enrich_mac="$ROUTER_MAC_ENRICHED" -v current_ssid="$CURRENT_SSID" '
 BEGIN {
     oui["98:da:c4"]="TP-Link"; oui["00:14:6c"]="Netgear"; oui["10:36:aa"]="Technicolor";
