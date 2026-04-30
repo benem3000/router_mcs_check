@@ -29,7 +29,7 @@ jobs:
         run: |
           FILE_HASH=$(sha256sum scripts/routermcs.sh | awk '{print $1}')
           BADGE="[![VirusTotal Scan](https://github.com/benem3000/router_mcs_check/actions/workflows/virustotal.yml/badge.svg)](https://www.virustotal.com/gui/file/$FILE_HASH)"
-          sed -i '/<!-- VT_BADGE_START -->/,/<!-- VT_BADGE_END -->/ { /<!-- VT_BADGE_START -->/ n; /<!-- VT_BADGE_END -->/ !d; /<!-- VT_BADGE_END -->/ i '"$BADGE"' }' README.md
+          sed -i '/<!-- VT_BADGE_START -->/,/<!-- VT_BADGE_END -->/c\<!-- VT_BADGE_START -->\n'"$BADGE"'\n<!-- VT_BADGE_END -->' README.md
 
       - name: Commit and Push updated README
         uses: stefanzweifel/git-auto-commit-action@v7.1.0
