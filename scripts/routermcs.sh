@@ -5,14 +5,12 @@
 # Usage: sudo ./routermcs.sh [-d | --debug] [-v | --verbose] [-c | --csv]
 # ==============================================================================
 
-# --- COLORS ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# --- INITIALIZATION ---
 REAL_USER=${SUDO_USER:-$USER}
 DEBUG=false
 VERBOSE=false
@@ -29,7 +27,6 @@ for arg in "$@"; do
     esac
 done
 
-# --- COMPREHENSIVE LOGGING SETUP ---
 if [[ "$DEBUG" == "true" ]]; then
     echo -e "\n--- FULL SESSION START: $(date) ---" >> "$FULL_LOG"
     chown "$REAL_USER:$REAL_USER" "$FULL_LOG" 2>/dev/null
