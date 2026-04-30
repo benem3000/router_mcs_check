@@ -3,6 +3,9 @@ A simple, interactive Bash utility for Linux environments that scans nearby wire
 
 _AI Disclosure: Google Gemini was used heavily in the making of this tool, though testing and careful guidance were carried out by myself._
 
+### A Note on Antivirus False Positives
+_Because this script requires `sudo` privileges, performs active network scans, and makes a silent `curl` request to an external API (MacVendors), some overly aggressive heuristic antivirus engines (like Windows Defender) may flag the raw file if you download it to a Windows machine first. This is a false positive. The code is entirely open-source, and you are encouraged to review it before execution. New versions will be uploaded to virustotals for review._
+
 ## Getting Started
 ## **Important! If sharing results with strangers or online, please be sure to select the option to censor the SSIDs to prevent potentially leaking your location!**
 
